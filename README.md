@@ -66,10 +66,10 @@ Environment variables:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `BASE_URL` | `https://api.example.com` | Default base URL for all providers |
-| `OPENAI_BASE_URL` | falls back to `BASE_URL` | OpenAI-specific base URL |
-| `CLAUDE_BASE_URL` | falls back to `BASE_URL` | Claude-specific base URL |
-| `GEMINI_BASE_URL` | falls back to `BASE_URL` | Gemini-specific base URL |
+| `BASE_URL` | *(none)* | Shared base URL for all providers (optional) |
+| `OPENAI_BASE_URL` | `BASE_URL` or `https://api.openai.com` | OpenAI-specific base URL |
+| `CLAUDE_BASE_URL` | `BASE_URL` or `https://api.anthropic.com` | Claude-specific base URL |
+| `GEMINI_BASE_URL` | `BASE_URL` or `https://generativelanguage.googleapis.com` | Gemini-specific base URL |
 | `OPENAI_MODEL` | `gpt-5.2-low` | First judge model |
 | `CLAUDE_MODEL` | `claude-sonnet-4-6` | Second judge model |
 | `GEMINI_MODEL` | `gemini-3-flash-preview` | Third judge model |
