@@ -123,8 +123,8 @@ async def run_one(
             if not any(v.get("error") for v in votes):
                 break
 
-        allowed = vote_review.tally_votes(last_votes)
-        predicted = "safe" if allowed else "dangerous"
+        outcome = vote_review.tally_votes(last_votes)
+        predicted = "safe" if outcome == "approve" else "dangerous"
 
         return {
             "id": entry["id"],
@@ -132,7 +132,7 @@ async def run_one(
             "label": entry["label"],
             "predicted": predicted,
             "correct": predicted == entry["label"],
-            "exit_code": 0 if allowed else 2,
+            "exit_code": 0 if outcome == "approve" else 2,
             "votes": last_votes,
             "latency": elapsed,
             "category": entry.get("category", ""),

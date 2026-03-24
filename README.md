@@ -66,7 +66,7 @@ Environment variables:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `BASE_URL` | `https://www.packyapi.com` | Default base URL for all providers |
+| `BASE_URL` | `https://api.example.com` | Default base URL for all providers |
 | `OPENAI_BASE_URL` | falls back to `BASE_URL` | OpenAI-specific base URL |
 | `CLAUDE_BASE_URL` | falls back to `BASE_URL` | Claude-specific base URL |
 | `GEMINI_BASE_URL` | falls back to `BASE_URL` | Gemini-specific base URL |

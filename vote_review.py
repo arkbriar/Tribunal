@@ -35,7 +35,7 @@ def _normalize_base_url(url: str) -> str:
     return url if url.endswith("/v1") else url + "/v1"
 
 
-_DEFAULT_BASE = os.environ.get("BASE_URL", "https://www.packyapi.com")
+_DEFAULT_BASE = os.environ.get("BASE_URL", "")
 TIMEOUT = int(os.environ.get("TRIBUNAL_TIMEOUT", "15"))  # seconds per model call
 VOTING_STRATEGY = os.environ.get("TRIBUNAL_STRATEGY", "unanimous")  # unanimous | majority
 
@@ -44,19 +44,19 @@ MODELS = [
         "name": "openai",
         "model": os.environ.get("OPENAI_MODEL", "gpt-5.2-low"),
         "api_key": os.environ.get("OPENAI_API_KEY", ""),
-        "base_url": _normalize_base_url(os.environ.get("OPENAI_BASE_URL", _DEFAULT_BASE)),
+        "base_url": _normalize_base_url(os.environ.get("OPENAI_BASE_URL", _DEFAULT_BASE or "https://api.openai.com")),
     },
     {
         "name": "claude",
         "model": os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-5-20250929"),
         "api_key": os.environ.get("CLAUDE_API_KEY", ""),
-        "base_url": _normalize_base_url(os.environ.get("CLAUDE_BASE_URL", _DEFAULT_BASE)),
+        "base_url": _normalize_base_url(os.environ.get("CLAUDE_BASE_URL", _DEFAULT_BASE or "https://api.anthropic.com")),
     },
     {
         "name": "gemini",
         "model": os.environ.get("GEMINI_MODEL", "gemini-3-flash-preview"),
         "api_key": os.environ.get("GEMINI_API_KEY", ""),
-        "base_url": _normalize_base_url(os.environ.get("GEMINI_BASE_URL", _DEFAULT_BASE)),
+        "base_url": _normalize_base_url(os.environ.get("GEMINI_BASE_URL", _DEFAULT_BASE or "https://generativelanguage.googleapis.com")),
     },
 ]
 
@@ -230,10 +230,10 @@ async def judge_command(client: httpx.AsyncClient, model_config: dict, command: 
         # Parse verdict — flexible matching
         verdict_match = re.search(r"VERDICT:\s*(SAFE|DANGEROUS)", text, re.IGNORECASE)
         if not verdict_match:
-            if re.search(r"\bSAFE\b", text) and not re.search(r"\bDANGEROUS\b", text):
-                verdict_match_str = "SAFE"
-            elif re.search(r"\bDANGEROUS\b", text):
+            if re.search(r"\bDANGEROUS\b", text):
                 verdict_match_str = "DANGEROUS"
+            elif re.search(r"\bSAFE\b", text):
+                verdict_match_str = "SAFE"
             else:
                 return {
                     "judge": name,
