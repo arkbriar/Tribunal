@@ -66,7 +66,10 @@ Environment variables:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `BASE_URL` | `https://www.packyapi.com` | OpenAI-compatible API proxy |
+| `BASE_URL` | `https://www.packyapi.com` | Default base URL for all providers |
+| `OPENAI_BASE_URL` | falls back to `BASE_URL` | OpenAI-specific base URL |
+| `CLAUDE_BASE_URL` | falls back to `BASE_URL` | Claude-specific base URL |
+| `GEMINI_BASE_URL` | falls back to `BASE_URL` | Gemini-specific base URL |
 | `OPENAI_MODEL` | `gpt-5.2-low` | First judge model |
 | `CLAUDE_MODEL` | `claude-sonnet-4-6` | Second judge model |
 | `GEMINI_MODEL` | `gemini-3-flash-preview` | Third judge model |

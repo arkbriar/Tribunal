@@ -29,8 +29,13 @@ import httpx
 # Configuration via env vars
 # ---------------------------------------------------------------------------
 
-_RAW_BASE = os.environ.get("BASE_URL", "https://www.packyapi.com").rstrip("/")
-BASE_URL = _RAW_BASE + "/v1" if not _RAW_BASE.endswith("/v1") else _RAW_BASE
+def _normalize_base_url(url: str) -> str:
+    """Ensure base URL ends with /v1."""
+    url = url.rstrip("/")
+    return url if url.endswith("/v1") else url + "/v1"
+
+
+_DEFAULT_BASE = os.environ.get("BASE_URL", "https://www.packyapi.com")
 TIMEOUT = int(os.environ.get("TRIBUNAL_TIMEOUT", "15"))  # seconds per model call
 VOTING_STRATEGY = os.environ.get("TRIBUNAL_STRATEGY", "unanimous")  # unanimous | majority
 
@@ -39,16 +44,19 @@ MODELS = [
         "name": "openai",
         "model": os.environ.get("OPENAI_MODEL", "gpt-5.2-low"),
         "api_key": os.environ.get("OPENAI_API_KEY", ""),
+        "base_url": _normalize_base_url(os.environ.get("OPENAI_BASE_URL", _DEFAULT_BASE)),
     },
     {
         "name": "claude",
         "model": os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-5-20250929"),
         "api_key": os.environ.get("CLAUDE_API_KEY", ""),
+        "base_url": _normalize_base_url(os.environ.get("CLAUDE_BASE_URL", _DEFAULT_BASE)),
     },
     {
         "name": "gemini",
         "model": os.environ.get("GEMINI_MODEL", "gemini-3-flash-preview"),
         "api_key": os.environ.get("GEMINI_API_KEY", ""),
+        "base_url": _normalize_base_url(os.environ.get("GEMINI_BASE_URL", _DEFAULT_BASE)),
     },
 ]
 
@@ -175,7 +183,7 @@ async def judge_command(client: httpx.AsyncClient, model_config: dict, command: 
     t0 = time.monotonic()
 
     try:
-        url = f"{BASE_URL}/chat/completions"
+        url = f"{model_config['base_url']}/chat/completions"
         headers = {
             "Authorization": f"Bearer {model_config['api_key']}",
             "Content-Type": "application/json",
