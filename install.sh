@@ -48,14 +48,17 @@ hook_cmd = sys.argv[2]
 hooks = settings.setdefault('hooks', {})
 pre_hooks = hooks.setdefault('PreToolUse', [])
 
-# Remove any existing tribunal hook
-pre_hooks = [h for h in pre_hooks if 'vote_review.py' not in h.get('command', '')]
+# Remove any existing tribunal hook entry
+pre_hooks = [h for h in pre_hooks if 'vote_review.py' not in json.dumps(h)]
 
-# Add the tribunal hook
+# Add the tribunal hook with matcher + hooks array structure
 pre_hooks.append({
-    'type': 'command',
-    'command': hook_cmd,
-    'timeout': 20000,
+    'matcher': 'Bash',
+    'hooks': [{
+        'type': 'command',
+        'command': hook_cmd,
+        'timeout': 20000,
+    }],
 })
 
 hooks['PreToolUse'] = pre_hooks

@@ -44,6 +44,10 @@ cp .env.example .env
 # into your ~/.claude/settings.json
 ```
 
+### Uninstall
+
+Remove the Tribunal hook entry from `hooks.PreToolUse` in `~/.claude/settings.json`.
+
 ### Test it
 
 ```bash

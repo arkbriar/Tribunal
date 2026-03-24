@@ -268,20 +268,32 @@ async def judge_command(client: httpx.AsyncClient, model_config: dict, command: 
 # ---------------------------------------------------------------------------
 
 
-def tally_votes(votes: list[dict]) -> bool:
-    """Return True if the command should be allowed."""
+def tally_votes(votes: list[dict]) -> str:
+    """Classify the vote outcome.
+
+    Returns:
+      "approve"  — all judges vote SAFE
+      "block"    — all judges vote DANGEROUS (or all errored)
+      "disagree" — judges disagree (mixed votes)
+    """
     safe_count = sum(1 for v in votes if v["vote"] == "SAFE")
     total = len(votes)
 
     if VOTING_STRATEGY == "majority":
-        return safe_count > total / 2
-    else:  # unanimous (default, fail-closed)
-        return safe_count == total
+        return "approve" if safe_count > total / 2 else "block"
+
+    # unanimous (default)
+    if safe_count == total:
+        return "approve"
+    elif safe_count == 0:
+        return "block"
+    else:
+        return "disagree"
 
 
-def print_summary(command: str, votes: list[dict], allowed: bool) -> None:
+def print_summary(command: str, votes: list[dict], outcome: str) -> None:
     """Print vote summary to stderr."""
-    status = "APPROVED" if allowed else "BLOCKED"
+    status = {"approve": "APPROVED", "block": "BLOCKED", "disagree": "ASK USER"}[outcome]
     print(f"\n{'='*60}", file=sys.stderr)
     print(f"TRIBUNAL {status}: {command[:80]}", file=sys.stderr)
     print(f"{'-'*60}", file=sys.stderr)
@@ -345,10 +357,23 @@ async def async_main() -> int:
             return 2  # fail-closed
 
     votes = list(votes)
-    allowed = tally_votes(votes)
-    print_summary(command, votes, allowed)
+    outcome = tally_votes(votes)
+    print_summary(command, votes, outcome)
 
-    return 0 if allowed else 2
+    if outcome == "approve":
+        return 0
+    elif outcome == "block":
+        return 2
+    else:
+        # Judges disagree — ask the user via Claude Code permission prompt
+        ask_json = json.dumps({
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "ask",
+            }
+        })
+        print(ask_json, file=sys.stdout)
+        return 0
 
 
 def main() -> int:

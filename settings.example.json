@@ -2,9 +2,14 @@
   "hooks": {
     "PreToolUse": [
       {
-        "type": "command",
-        "command": "bash -c 'set -a && source \"/path/to/tribunal/.env\" && set +a && uv run --directory \"/path/to/tribunal\" python vote_review.py'",
-        "timeout": 20000
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'set -a && source \"/path/to/tribunal/.env\" && set +a && uv run --directory \"/path/to/tribunal\" python vote_review.py'",
+            "timeout": 20000
+          }
+        ]
       }
     ]
   }
