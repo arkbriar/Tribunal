@@ -75,6 +75,7 @@ Environment variables:
 | `GEMINI_MODEL` | `gemini-3-flash-preview` | Third judge model |
 | `TRIBUNAL_TIMEOUT` | `15` | Per-judge timeout in seconds |
 | `TRIBUNAL_STRATEGY` | `unanimous` | Voting strategy: `unanimous` or `majority` |
+| `TRIBUNAL_AUDIT_LOG` | *(disabled)* | Path to JSONL audit log file (e.g. `~/.tribunal/audit.jsonl`) |
 
 ## Evaluation
 

@@ -17,11 +17,13 @@ Exit codes:
 from __future__ import annotations
 
 import asyncio
+import fcntl
 import json
 import os
 import re
 import sys
 import time
+from pathlib import Path
 
 import httpx
 
@@ -38,6 +40,7 @@ def _normalize_base_url(url: str) -> str:
 _DEFAULT_BASE = os.environ.get("BASE_URL", "")
 TIMEOUT = int(os.environ.get("TRIBUNAL_TIMEOUT", "15"))  # seconds per model call
 VOTING_STRATEGY = os.environ.get("TRIBUNAL_STRATEGY", "unanimous")  # unanimous | majority
+AUDIT_LOG = os.environ.get("TRIBUNAL_AUDIT_LOG", "")  # path to JSONL audit log (disabled if empty)
 
 MODELS = [
     {
@@ -59,6 +62,50 @@ MODELS = [
         "base_url": _normalize_base_url(os.environ.get("GEMINI_BASE_URL", _DEFAULT_BASE or "https://generativelanguage.googleapis.com")),
     },
 ]
+
+# ---------------------------------------------------------------------------
+# Audit log
+# ---------------------------------------------------------------------------
+
+
+def write_audit_log(
+    command: str,
+    layer: str,
+    outcome: str,
+    reason: str | None = None,
+    votes: list[dict] | None = None,
+) -> None:
+    """Append one JSONL entry to the audit log file (if configured)."""
+    if not AUDIT_LOG:
+        return
+    entry = {
+        "ts": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+        "command": command,
+        "layer": layer,
+        "outcome": outcome,
+    }
+    if reason:
+        entry["reason"] = reason
+    if votes:
+        entry["votes"] = [
+            {"judge": v["judge"], "model": v["model"], "vote": v["vote"],
+             "reason": v["reason"], "latency": round(v["latency"], 3),
+             **({"error": v["error"]} if v["error"] else {})}
+            for v in votes
+        ]
+    try:
+        path = Path(AUDIT_LOG).expanduser()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        line = json.dumps(entry, separators=(",", ":")) + "\n"
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            os.write(fd, line.encode())
+        finally:
+            os.close(fd)  # releases the lock
+    except OSError as exc:
+        print(f"tribunal: audit log write failed: {exc}", file=sys.stderr)
+
 
 # ---------------------------------------------------------------------------
 # Layer 1: Trivially safe commands — skip these entirely
@@ -194,7 +241,7 @@ async def judge_command(client: httpx.AsyncClient, model_config: dict, command: 
             "messages": [
                 {"role": "user", "content": user_content},
             ],
-            "max_tokens": 256,
+            "max_tokens": 4096,
             "temperature": 0,
         }
 
@@ -224,8 +271,11 @@ async def judge_command(client: httpx.AsyncClient, model_config: dict, command: 
                 "error": "parse_error",
             }
 
-        # Strip <think>...</think> reasoning blocks (e.g. from OpenAI o-series)
-        text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+        # Strip <think>...</think> reasoning blocks (e.g. from OpenAI o-series).
+        # Parse verdict from the full text first — thinking models like Gemini
+        # may place the verdict *inside* the think block.
+        stripped = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+        text = stripped if stripped else text
 
         # Parse verdict — flexible matching
         verdict_match = re.search(r"VERDICT:\s*(SAFE|DANGEROUS)", text, re.IGNORECASE)
@@ -320,27 +370,42 @@ def print_summary(command: str, votes: list[dict], outcome: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _emit_decision(decision: str) -> None:
+    """Print hookSpecificOutput JSON to stdout for Claude Code."""
+    print(json.dumps({
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": decision,
+        }
+    }), file=sys.stdout)
+
+
 async def async_main() -> int:
     # Read hook input from stdin
     try:
         hook_input = json.load(sys.stdin)
     except (json.JSONDecodeError, EOFError):
         print("tribunal: failed to read hook input", file=sys.stderr)
+        _emit_decision("deny")
         return 2  # fail-closed
 
     # Extract command — Claude Code PreToolUse sends tool_input with "command" key
     tool_name = hook_input.get("tool_name", "")
     if tool_name != "Bash":
+        _emit_decision("allow")
         return 0  # only review Bash commands
 
     tool_input = hook_input.get("tool_input", {})
     command = tool_input.get("command", "")
 
     if not command:
+        _emit_decision("allow")
         return 0
 
     # Layer 1: Trivially safe allowlist
     if is_trivially_safe(command):
+        write_audit_log(command, layer="allowlist", outcome="approve")
+        _emit_decision("allow")
         return 0
 
     # Layer 2: Known-dangerous blocklist (instant, no API call)
@@ -350,6 +415,8 @@ async def async_main() -> int:
         print(f"TRIBUNAL BLOCKED (blocklist): {command[:80]}", file=sys.stderr)
         print(f"  Reason: {block_reason}", file=sys.stderr)
         print(f"{'='*60}\n", file=sys.stderr)
+        write_audit_log(command, layer="blocklist", outcome="block", reason=block_reason)
+        _emit_decision("deny")
         return 2
 
     # Layer 3: Query all judges in parallel (async)
@@ -362,25 +429,24 @@ async def async_main() -> int:
             )
         except asyncio.TimeoutError:
             print("tribunal: all judges timed out", file=sys.stderr)
+            write_audit_log(command, layer="judges", outcome="block", reason="timeout")
+            _emit_decision("deny")
             return 2  # fail-closed
 
     votes = list(votes)
     outcome = tally_votes(votes)
     print_summary(command, votes, outcome)
+    write_audit_log(command, layer="judges", outcome=outcome, votes=votes)
 
     if outcome == "approve":
+        _emit_decision("allow")
         return 0
     elif outcome == "block":
+        _emit_decision("deny")
         return 2
     else:
         # Judges disagree — ask the user via Claude Code permission prompt
-        ask_json = json.dumps({
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "ask",
-            }
-        })
-        print(ask_json, file=sys.stdout)
+        _emit_decision("ask")
         return 0
 
 
